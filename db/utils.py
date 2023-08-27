@@ -5,7 +5,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-db_params = "dbname=postgres user=postgres password=password host=localhost port=5432"
+db_params = {
+    "dbname": "postgres",
+    "user": "postgres",
+    "password": "password",
+    "host": "localhost",
+    "port": 5432
+}
 
 
 def create_database(db_name: str, cursor: cursor):
@@ -37,4 +43,19 @@ def delete_database(db_name: str, cursor: cursor):
     delete_db_sql = sql.SQL("DROP DATABASE IF EXISTS {}").format(
         sql.Identifier(db_name))  # using sql.Identifier to prevent SQL injection
     cursor.execute(delete_db_sql)
-    logger.info("Database deleted successfully.")
+    logger.info(f"Database '{db_name}' deleted successfully.")
+
+
+def create_patient_table(cursor: cursor):
+
+    create_patient_table_sql = """
+            CREATE TABLE IF NOT EXISTS patient (
+                pid serial PRIMARY KEY,
+                full_url text,
+                resource jsonb,
+                request jsonb
+            )
+        """
+
+    cursor.execute(create_patient_table_sql)
+    logger.info("Table 'patient' created successfully.")
