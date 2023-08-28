@@ -7,8 +7,10 @@ import logging
 
 from db.utils import (create_database, delete_database,
                       create_patient_table, add_patient_entry,
+                      create_resource_table, add_event_entry,
                       db_params)
 from tests.data.patient_entry import PATIENT_ENTRY
+from tests.data.encounter_entry import ENCOUNTER_ENTRY
 
 test_db_params = {
     "dbname": "test_database_fhir",
@@ -85,7 +87,19 @@ def test_db_cursor(clear_tables) -> cursor:
 def test_create_table(test_db_cursor) -> cursor:
     # Creates tables and returns a cursor object connected to the test database
     create_patient_table(test_db_cursor)
+    create_resource_table(test_db_cursor, TestAddEventEntry.table_name)
     yield test_db_cursor
+
+
+@pytest.fixture
+def add_patients(test_create_table):
+    # add 5 patients to the patient table
+    cursor = test_create_table
+    patients = [{"fullUrl": f"urn:uuid:Patient-{i}", "resource": {
+        "name": f"Patient {i}"}, "request": {"method": "POST"}} for i in range(1, 6)]
+    for patient in patients:
+        add_patient_entry(cursor, patient)
+    yield cursor
 
 
 class TestCreateDatabase:
@@ -252,3 +266,178 @@ class TestAddPatientEntry:
         assert full_url == PATIENT_ENTRY["fullUrl"]
         assert resource == PATIENT_ENTRY["resource"]
         assert request == PATIENT_ENTRY["request"]
+
+
+class TestCreateResourceTable:
+    resource_table_columns = ['id', 'full_url',
+                              'request', 'resource', 'patient_id']
+    resource_table_name_data_type = [('id', 'integer'), ('request', 'jsonb'), (
+        'resource', 'jsonb'), ('patient_id', 'integer'), ('full_url', 'text')]
+    table_name = "test_resource"
+
+    def test_create_resource_table_returns_type_none(self, test_create_table):
+        cursor = test_create_table
+        assert create_resource_table(cursor, self.table_name) is None
+
+    def test_create_resource_table_creates_table_with_correct_name(self, test_create_table):
+        cursor = test_create_table
+        create_resource_table(cursor, self.table_name)
+        cursor.execute(
+            """SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'""")
+        tables = [table[0] for table in cursor.fetchall()]
+        assert self.table_name in tables
+
+    def test_create_resource_table_contains_the_correct_column_names(
+            self, test_create_table):
+        cursor = test_create_table
+        create_resource_table(cursor, self.table_name)
+        cursor.execute(
+            """SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'test_resource'""")
+        columns = [column[0] for column in cursor.fetchall()]
+        assert sorted(columns) == sorted(self.resource_table_columns)
+
+    def test_create_resource_table_columns_contain_correct_data_types(self, test_create_table):
+        cursor = test_create_table
+        create_resource_table(cursor, self.table_name)
+        cursor.execute(
+            """SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'test_resource'""")
+        column_name_and_data_types = cursor.fetchall()
+        assert column_name_and_data_types == self.resource_table_name_data_type
+
+    def test_create_resource_table_can_create_multiple_tables(self, test_create_table):
+        cursor = test_create_table
+        tables = ["first_resource_table",
+                  "second_resource_table", "third_resource_table"]
+        cursor.execute(
+            """SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'""")
+        tables_before = len(cursor.fetchall())
+
+        for table in tables:
+            create_resource_table(cursor, table)
+        cursor.execute(
+            """SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'""")
+        tables = cursor.fetchall()
+        assert len(tables) - tables_before == 3
+
+
+class TestAddEventEntry:
+    table_name = "resource_type_01"
+    full_url = "resource_01_url"
+    resource = {"resourceType": "resource 01"}
+    request = {"method": "POST", "url": "resource_01"}
+    test_data = {
+        "fullUrl": full_url,
+        "resource": resource,
+        "request": request
+    }
+    patient_id = 1
+
+    def test_add_event_entry_returns_type_int(self, add_patients):
+        cursor = add_patients
+        assert isinstance(add_event_entry(
+            cursor, self.table_name, self.test_data, self.patient_id), int)
+
+    def test_add_event_entry_returns_correct_value(self, add_patients):
+        cursor = add_patients
+        id = add_event_entry(cursor, self.table_name,
+                             self.test_data, self.patient_id)
+        assert id == 1
+        new_entry = self.test_data.copy()
+        # add another entry to check that id increments
+        new_entry["fullUrl"] = "new_event_url"
+        id = add_event_entry(cursor, self.table_name,
+                             new_entry, self.patient_id)
+        assert id == 2
+
+    def test_add_event_entry_adds_entry_to_resource_table(self, add_patients):
+        cursor = add_patients
+        # check table is empty first
+        cursor.execute(
+            f"""SELECT * FROM {self.table_name}""")
+        resource_entries = cursor.fetchall()
+        assert len(resource_entries) == 0
+        add_event_entry(cursor, self.table_name,
+                        self.test_data, self.patient_id)
+        cursor.execute(
+            f"""SELECT * FROM {self.table_name}""")
+        resource_entries = cursor.fetchall()
+        assert len(resource_entries) == 1
+
+    def test_add_event_entry_adds_correct_data_to_resource_table(self, add_patients):
+        cursor = add_patients
+        add_event_entry(cursor, self.table_name,
+                        self.test_data, self.patient_id)
+        cursor.execute(
+            f"""SELECT * FROM {self.table_name}""")
+        id, full_url, request, resource, patient_id = cursor.fetchone()
+        assert id == 1
+        assert full_url == self.full_url
+        assert resource == self.resource
+        assert request == self.request
+        assert patient_id == self.patient_id
+
+    def test_add_event_entry_rejects_duplicate_entries(self, add_patients):
+        cursor = add_patients
+        add_event_entry(cursor, self.table_name,
+                        self.test_data, self.patient_id)
+        id = add_event_entry(cursor, self.table_name,
+                             self.test_data, self.patient_id)
+        assert id == -1
+        # confirm only one entry was added
+        cursor.execute(
+            f"""SELECT * FROM {self.table_name}""")
+        patient_entries = cursor.fetchall()
+        assert len(patient_entries) == 1
+
+    def test_add_event_entry_logs_error_if_duplicate_full_url(self, add_patients, caplog):
+        cursor = add_patients
+        add_event_entry(cursor, self.table_name,
+                        self.test_data, self.patient_id)
+        # Attempt to add the same patient entry again
+        add_event_entry(cursor, self.table_name,
+                        self.test_data, self.patient_id)
+        assert f"Resource entry with fullUrl '{self.full_url}' already exists." in caplog.text
+
+    def test_add_event_entry_rejects_request_if_patient_id_does_not_exist(self, add_patients):
+        cursor = add_patients
+        patient_id = 100
+        id = add_event_entry(cursor, self.table_name,
+                             self.test_data, patient_id)
+        assert id == -1  # minus value indicates error
+        # confirm only one entry was added
+        cursor.execute(
+            f"""SELECT * FROM {self.table_name}""")
+        patient_entries = cursor.fetchall()
+        assert len(patient_entries) == 0
+
+    def test_add_event_entry_logs_error_if_patient_id_does_not_exist(self, add_patients, caplog):
+        cursor = add_patients
+        patient_id = 100
+        add_event_entry(cursor, self.table_name,
+                        self.test_data, patient_id)
+        assert f"Patient with pid '{patient_id}' does not exist." in caplog.text
+
+    def test_add_event_entry_succeeds_for_sample_event_entry_data(self, add_patients):
+        cursor = add_patients
+        id = add_event_entry(cursor, self.table_name,
+                             ENCOUNTER_ENTRY, self.patient_id)
+        assert id == 1
+        cursor.execute(
+            f"""SELECT * FROM {self.table_name}""")
+        resource_entries = cursor.fetchall()
+        assert len(resource_entries) == 1
+        (id, full_url, request, resource, patient_id) = resource_entries[0]
+        assert full_url == ENCOUNTER_ENTRY["fullUrl"]
+        assert resource == ENCOUNTER_ENTRY["resource"]
+        assert request == ENCOUNTER_ENTRY["request"]
+        assert patient_id == self.patient_id

@@ -62,17 +62,47 @@ def create_patient_table(cursor: cursor):
 
     """
 
-    create_patient_table_sql = """
+    create_patient_table_sql = sql.SQL("""
             CREATE TABLE IF NOT EXISTS patient (
                 pid serial PRIMARY KEY,
                 full_url text UNIQUE,
                 resource jsonb,
                 request jsonb
             )
-        """
+        """)
 
     cursor.execute(create_patient_table_sql)
     logger.info("Table 'patient' created successfully.")
+
+
+def create_resource_table(cursor: cursor, table_name: str):
+    """Creates a new table to store FHIR entries of matching resource types.
+
+    The created table will contain the following columns:
+        id: unique serial key for each resource entry
+        full_url: the fullUrl value of the resource entry (must be unique)
+        request: jsonb representation of the request object
+        resource: jsonb representation of the resource object
+        patient_id: foreign key reference to the patient table pid value
+
+    Args:
+        cursor (psycopg2.extensions.cursor): cursor object to execute SQL commands
+        table_name (str): name of the table to create
+
+    """
+
+    resource_table_sql = sql.SQL("""
+            CREATE TABLE IF NOT EXISTS {} (
+                id serial PRIMARY KEY,
+                full_url text UNIQUE,
+                request jsonb,
+                resource jsonb,
+                patient_id integer REFERENCES patient(pid) NOT NULL
+            )
+        """).format(sql.Identifier(table_name))
+
+    cursor.execute(resource_table_sql)
+    logger.info(f"New Table '{table_name}' created successfully.")
 
 
 def add_patient_entry(cursor: cursor, patient_entry: dict) -> int:
@@ -113,3 +143,51 @@ def add_patient_entry(cursor: cursor, patient_entry: dict) -> int:
         pid = -1
 
     return pid
+
+
+def add_event_entry(cursor: cursor, table_name: str, event: dict, patient_id: int) -> int:
+    """Parses the event entry, and adds it to the corresponding table. The Table 
+    should match the resource type of the event entry.
+
+    Args:
+        cursor (psycopg2.extensions.cursor): cursor object to execute SQL commands
+        table_name (str): name of the table to add the resource entry to
+        event (dict): event entry to add to the database
+        patient_id (int): pid of the patient that the resource entry belongs to
+
+    Returns:
+        int: id of the resource entry that was added to the database. If the
+        resource fullUrl already exists in the database, returns -1 to indicate
+        that the resource was not added.
+    """
+
+    full_url = event["fullUrl"]
+    # make data suitable for jsonb format
+    resource = Json(event["resource"])
+    request = Json(event["request"])
+
+    insert_resource_sql = sql.SQL("""
+        INSERT INTO {} (full_url, resource, request, patient_id)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
+    """).format(sql.Identifier(table_name))
+
+    try:
+        cursor.execute(insert_resource_sql,
+                       (full_url, resource,
+                        request, patient_id))
+        id = cursor.fetchone()[0]
+        logger.info(
+            f"Entry added successfully to {table_name}. ID: {id}")
+
+    except errors.UniqueViolation:
+        logger.error(
+            f"Resource entry with fullUrl '{full_url}' already exists.")
+        id = -1
+
+    except errors.ForeignKeyViolation:
+        logger.error(
+            f"Patient with pid '{patient_id}' does not exist.")
+        id = -1
+
+    return id

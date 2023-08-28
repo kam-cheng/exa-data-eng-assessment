@@ -1,6 +1,7 @@
 import json
 from json.decoder import JSONDecodeError
 import logging
+import re
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -66,3 +67,17 @@ class PatientNotFoundError(Exception):
     def __init__(self):
         self.message = "Unable to locate Patient entry in input entry list."
         super().__init__(self.message)
+
+
+def pascal_to_snake_case(camel_str: str) -> str:
+    """Converts a PascalCase string to snake_case. Used to convert FHIR
+    resource type names which are in PascalCase so that we use them for
+    psql table naming, which by convention uses snake case."""
+
+    """ Regex explanation:
+    1. ([a-z0-9]) matches the first lowercase letter or digit
+    2. ([A-Z]) matches the second uppercase letter
+    3. \1 and \2 are the first and second matches
+    4. r'\1_\2' inserts an underscore between the matches """
+    snake_str = re.sub('([a-z0-9])([A-Z])', r'\1_\2', camel_str)
+    return snake_str.lower()

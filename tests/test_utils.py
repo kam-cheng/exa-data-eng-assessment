@@ -4,6 +4,7 @@ import json
 from utils import (
     parse_json_file,
     retrieve_patient_entry_index,
+    pascal_to_snake_case,
     PatientNotFoundError)
 
 
@@ -77,3 +78,28 @@ class TestRetreivePatientEntryIndex:
             retrieve_patient_entry_index(self.no_patient_entry)
         assert "Unable to locate Patient entry in input entry list." in str(
             e.value)
+
+
+class TestPascalToSnakeCase:
+    pascal = "Pascal"
+    snake = "pascal"
+    pascal_1 = "PascalCase"
+    snake_1 = "pascal_case"
+    pascal_2 = "PascalCaseTwo"
+    snake_2 = "pascal_case_two"
+
+    def test_pascal_to_snake_case_returns_type_string(self):
+        snake = pascal_to_snake_case(self.pascal)
+        assert isinstance(snake, str)
+
+    def test_pascal_to_snake_case_returns_correct_value_if_uppercase(self):
+        snake = pascal_to_snake_case(self.pascal)
+        assert snake == "pascal"
+
+    def test_pascal_to_snake_case_returns_correct_value_for_two_uppercases(self):
+        snake = pascal_to_snake_case(self.pascal_1)
+        assert snake == self.snake_1
+
+    def test_pascal_to_snake_case_returns_correct_value_for_three_uppercases(self):
+        snake = pascal_to_snake_case(self.pascal_2)
+        assert snake == self.snake_2
