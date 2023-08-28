@@ -5,7 +5,10 @@ from psycopg2.extensions import cursor
 import pytest
 import logging
 
-from db.utils import create_database, delete_database, create_patient_table, db_params
+from db.utils import (create_database, delete_database,
+                      create_patient_table, add_patient_entry,
+                      db_params)
+from tests.data.patient_entry import PATIENT_ENTRY
 
 test_db_params = {
     "dbname": "test_database_fhir",
@@ -51,12 +54,8 @@ def create_test_db():
 
 
 @pytest.fixture
-def test_db_cursor(create_test_db) -> cursor:
-    """Pytest fixture which does the following:
-    1. Connects to "test_database_fhir"
-    2. Drops all tables in the database
-    3. Yields a cursor object
-    4. Closes the cursor and connection"""
+def clear_tables(create_test_db):
+    """Pytest fixture which clears all tables in the test database before each test"""
     connection = psycopg2.connect(**test_db_params)
     connection.autocommit = True
     cursor = connection.cursor()
@@ -65,12 +64,28 @@ def test_db_cursor(create_test_db) -> cursor:
     WHERE table_schema = 'public'"""
     cursor.execute(get_tables_query)
     table_list = [table[0] for table in cursor.fetchall()]
-    print("table list", table_list)
     for table in table_list:
         cursor.execute(sql.SQL(f"DROP TABLE {table} CASCADE"))
+    cursor.close()
+    connection.close()
+
+
+@pytest.fixture
+def test_db_cursor(clear_tables) -> cursor:
+    # Pytest fixture which yields a cursor object connected to the test database
+    connection = psycopg2.connect(**test_db_params)
+    connection.autocommit = True
+    cursor = connection.cursor()
     yield cursor
     cursor.close()
     connection.close()
+
+
+@pytest.fixture
+def test_create_table(test_db_cursor) -> cursor:
+    # Creates tables and returns a cursor object connected to the test database
+    create_patient_table(test_db_cursor)
+    yield test_db_cursor
 
 
 class TestCreateDatabase:
@@ -146,3 +161,94 @@ class TestCreatePatientTable:
             WHERE table_name = 'patient'""")
         column_name_and_data_types = test_db_cursor.fetchall()
         assert column_name_and_data_types == self.patient_table_name_data_type
+
+
+class TestAddPatientEntry:
+    full_url = "test_url"
+    resource = {"resourceType": "Patient"}
+    request = {"method": "POST", "url": "Patient"}
+    test_data = {
+        "fullUrl": full_url,
+        "resource": resource,
+        "request": request
+    }
+
+    def test_add_patient_entry_returns_type_int(self, test_create_table):
+        cursor = test_create_table
+        assert isinstance(add_patient_entry(
+            cursor, PATIENT_ENTRY), int)
+
+    def test_add_patient_entry_returns_correct_value(self, test_create_table):
+        cursor = test_create_table
+        pid = add_patient_entry(cursor, self.test_data)
+        assert pid == 1
+
+    def test_add_patient_entry_adds_entry_to_patient_table(self, test_create_table):
+        cursor = test_create_table
+        add_patient_entry(cursor, self.test_data)
+        cursor.execute(
+            """SELECT * FROM patient""")
+        patient_entries = cursor.fetchall()
+        assert len(patient_entries) == 1
+
+    def test_add_patient_entry_adds_correct_data_to_patient_table(self, test_create_table):
+        add_patient_entry(test_create_table, self.test_data)
+        cursor = test_create_table
+        cursor.execute(
+            """SELECT * FROM patient""")
+        pid, full_url, resource, request = cursor.fetchone()
+        assert pid == 1
+        assert full_url == self.full_url
+        assert resource == self.resource
+        assert request == self.request
+
+    def test_add_patient_entry_increments_pid_for_each_entry(self, test_create_table):
+        cursor = test_create_table
+        add_patient_entry(cursor, self.test_data)
+        second_patient = self.test_data.copy()
+        # fullUrl is unique so we need to change it
+        second_patient["fullUrl"] = "second_url"
+        add_patient_entry(cursor, second_patient)
+        cursor.execute(
+            """SELECT * FROM patient""")
+        patient_entries = cursor.fetchall()
+        assert len(patient_entries) == 2
+        # index 0 contains the pid
+        assert patient_entries[0][0] == 1
+        assert patient_entries[1][0] == 2
+
+    def test_add_patient_entry_rejects_duplicate_full_url(self, test_create_table):
+        # Since the return value is always an int, a -1 will indicate that the
+        # entry was not added
+        cursor = test_create_table
+        pid = add_patient_entry(cursor, self.test_data)
+        assert pid == 1
+        # Attempt to add the same patient entry again
+        pid = add_patient_entry(cursor, self.test_data)
+        assert pid == -1
+        # confirm only one entry was added
+        cursor.execute(
+            """SELECT * FROM patient""")
+        patient_entries = cursor.fetchall()
+        assert len(patient_entries) == 1
+
+    def test_add_patient_entry_logs_error_if_duplicate_full_url(self, test_create_table, caplog):
+        cursor = test_create_table
+        add_patient_entry(cursor, self.test_data)
+        # Attempt to add the same patient entry again
+        add_patient_entry(cursor, self.test_data)
+        assert f"Patient entry with fullUrl '{self.full_url}' already exists." in caplog.text
+
+    def test_add_patient_entry_succeeds_for_sample_patient_entry_data(self, test_create_table):
+        # test using the sample patient entry data to ensure it works as intended.
+        cursor = test_create_table
+        pid = add_patient_entry(cursor, PATIENT_ENTRY)
+        assert pid == 1
+        cursor.execute(
+            """SELECT * FROM patient""")
+        patient_entries = cursor.fetchall()
+        assert len(patient_entries) == 1
+        (pid, full_url, resource, request) = patient_entries[0]
+        assert full_url == PATIENT_ENTRY["fullUrl"]
+        assert resource == PATIENT_ENTRY["resource"]
+        assert request == PATIENT_ENTRY["request"]

@@ -1,5 +1,7 @@
 from psycopg2 import sql, errors
 from psycopg2.extensions import cursor
+from psycopg2.extras import Json
+
 
 import logging
 
@@ -47,11 +49,23 @@ def delete_database(db_name: str, cursor: cursor):
 
 
 def create_patient_table(cursor: cursor):
+    """Creates a table named 'patient' to store the FHIR patient entry data.
+
+    The created table will contain the following columns:
+        pid: unique serial key for each patient that other tables can reference
+        full_url: the fullUrl value of the patient entry (must be unique)
+        resource: jsonb representation of the patient resource object
+        request: jsonb representation of the request object
+
+    Args:
+        cursor (psycopg2.extensions.cursor): cursor object to execute SQL commands
+
+    """
 
     create_patient_table_sql = """
             CREATE TABLE IF NOT EXISTS patient (
                 pid serial PRIMARY KEY,
-                full_url text,
+                full_url text UNIQUE,
                 resource jsonb,
                 request jsonb
             )
@@ -59,3 +73,43 @@ def create_patient_table(cursor: cursor):
 
     cursor.execute(create_patient_table_sql)
     logger.info("Table 'patient' created successfully.")
+
+
+def add_patient_entry(cursor: cursor, patient_entry: dict) -> int:
+    """Parses the Patient Entry, and adds it the 'patient' table. Creates a
+    unique identifier for the patient (pid) which can be referenced elsewhere.
+
+    Args:
+        cursor (psycopg2.extensions.cursor): cursor object to execute SQL commands
+        patient_entry (dict): patient entry to add to the database
+
+    Returns:
+        int: pid of the patient entry that was added to the database. If the
+        patient fullUrl already exists in the database, returns -1 to indicate
+        that the patient was not added.
+    """
+
+    full_url = patient_entry["fullUrl"]
+    # make data suitable for jsonb format
+    resource = Json(patient_entry["resource"])
+    request = Json(patient_entry["request"])
+
+    insert_patient_sql = sql.SQL("""
+        INSERT INTO patient (full_url, resource, request)
+        VALUES (%s, %s, %s)
+        RETURNING pid
+    """)
+    try:
+        cursor.execute(insert_patient_sql,
+                       (full_url, resource,
+                        request))
+        pid = cursor.fetchone()[0]
+        logger.info(
+            f"Patient entry added successfully. PID: {pid}")
+
+    except errors.UniqueViolation:
+        logger.error(
+            f"Patient entry with fullUrl '{full_url}' already exists.")
+        pid = -1
+
+    return pid
