@@ -2,7 +2,7 @@ import pytest
 import json
 import os
 
-from utils import (
+from process.utils import (
     parse_json_file,
     retrieve_patient_entry_index,
     pascal_to_snake_case,
