@@ -8,12 +8,13 @@ import logging
 from db.utils import (create_database, delete_database,
                       create_patient_table, add_patient_entry,
                       create_resource_table, add_event_entry,
+                      retrieve_table_names,
                       db_params)
 from tests.data.patient_entry import PATIENT_ENTRY
 from tests.data.encounter_entry import ENCOUNTER_ENTRY
 
 test_db_params = {
-    "dbname": "test_database_fhir",
+    "dbname": "test_patient_db",
     "user": "postgres",
     "password": "password",
     "host": "localhost",
@@ -103,7 +104,7 @@ def add_patients(test_create_table):
 
 
 class TestCreateDatabase:
-    test_db_name = "test_database_fhir"
+    test_db_name = "test_db"
 
     def test_create_database_returns_type_none(self, db_cursor):
         assert create_database(self.test_db_name, db_cursor) is None
@@ -129,7 +130,7 @@ class TestCreateDatabase:
 
 
 class TestDeleteDatabase:
-    test_db_name = "test_database_fhir"
+    test_db_name = "test_db"
 
     def test_delete_database_returns_type_none(self, db_cursor):
         assert delete_database(self.test_db_name, db_cursor) is None
@@ -174,7 +175,9 @@ class TestCreatePatientTable:
             FROM information_schema.columns 
             WHERE table_name = 'patient'""")
         column_name_and_data_types = test_db_cursor.fetchall()
-        assert column_name_and_data_types == self.patient_table_name_data_type
+        # iterate over list as we cannot guarantee the order of the columns
+        for name_data in self.patient_table_name_data_type:
+            assert name_data in column_name_and_data_types
 
 
 class TestAddPatientEntry:
@@ -308,7 +311,9 @@ class TestCreateResourceTable:
             FROM information_schema.columns 
             WHERE table_name = 'test_resource'""")
         column_name_and_data_types = cursor.fetchall()
-        assert column_name_and_data_types == self.resource_table_name_data_type
+        # iterate over list as we cannot guarantee the order of the columns
+        for name_data in self.resource_table_name_data_type:
+            assert name_data in column_name_and_data_types
 
     def test_create_resource_table_can_create_multiple_tables(self, test_create_table):
         cursor = test_create_table
@@ -441,3 +446,21 @@ class TestAddEventEntry:
         assert resource == ENCOUNTER_ENTRY["resource"]
         assert request == ENCOUNTER_ENTRY["request"]
         assert patient_id == self.patient_id
+
+
+class TestRetrieveTableNames:
+    tables = ["patient", "resource_type_01"]
+
+    def test_retrieve_table_names_returns_type_list(self, test_create_table):
+        cursor = test_create_table
+        assert isinstance(retrieve_table_names(cursor), list)
+
+    def test_retrieve_table_names_returns_correct_number_of_tables(self, test_create_table):
+        cursor = test_create_table
+        tables = retrieve_table_names(cursor)
+        assert len(tables) == 2
+
+    def test_retrieve_table_names_returns_correct_table_names(self, test_create_table):
+        cursor = test_create_table
+        tables = retrieve_table_names(cursor)
+        assert tables == self.tables

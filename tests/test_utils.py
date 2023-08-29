@@ -1,10 +1,12 @@
 import pytest
 import json
+import os
 
 from utils import (
     parse_json_file,
     retrieve_patient_entry_index,
     pascal_to_snake_case,
+    retrieve_json_filenames,
     PatientNotFoundError)
 
 
@@ -103,3 +105,33 @@ class TestPascalToSnakeCase:
     def test_pascal_to_snake_case_returns_correct_value_for_three_uppercases(self):
         snake = pascal_to_snake_case(self.pascal_2)
         assert snake == self.snake_2
+
+
+class TestRetrieveJsonFilenames:
+    directory = "tests/data/fhir_bundles"
+    filenames = ["fhir_01.json", "fhir_02.json", "fhir_03.json",
+                 "fhir_04.json", "fhir_05.json"]
+
+    def test_retrieve_json_filenames_returns_type_list(self):
+        files = retrieve_json_filenames(self.directory)
+        assert isinstance(files, list)
+
+    def test_retrieve_json_filenames_returns_list_of_correct_length(self):
+        files = retrieve_json_filenames(self.directory)
+        assert len(files) == 5
+
+    def test_retrieve_json_filenames_returns_correct_files(self):
+        retrieved_files = retrieve_json_filenames(self.directory)
+        for filename in self.filenames:
+            assert filename in retrieved_files
+
+    def test_retrieve_json_filenames_ignores_non_json_files(self):
+        files = retrieve_json_filenames(self.directory)
+        assert len(files) == 5
+        # add non-json file to directory
+        with open(os.path.join(self.directory, "non_json_file.txt"), 'w') as f:
+            f.write("test")
+        files = retrieve_json_filenames(self.directory)
+        assert len(files) == 5
+        # remove non-json file from directory
+        os.remove(os.path.join(self.directory, "non_json_file.txt"))

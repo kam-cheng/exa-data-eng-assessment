@@ -2,13 +2,11 @@ from psycopg2 import sql, errors
 from psycopg2.extensions import cursor
 from psycopg2.extras import Json
 
-
 import logging
 
 logger = logging.getLogger(__name__)
 
 db_params = {
-    "dbname": "postgres",
     "user": "postgres",
     "password": "password",
     "host": "localhost",
@@ -191,3 +189,27 @@ def add_event_entry(cursor: cursor, table_name: str, event: dict, patient_id: in
         id = -1
 
     return id
+
+
+def retrieve_table_names(cursor: cursor) -> list:
+    """Retrieves a list of table names from the database.
+
+    Args:
+        cursor (psycopg2.extensions.cursor): cursor object to execute SQL commands
+
+    Returns:
+        list: list of table names
+    """
+
+    table_names_sql = sql.SQL("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        ORDER BY table_name;
+    """)
+
+    cursor.execute(table_names_sql)
+    table_names = cursor.fetchall()
+    table_names = [name[0] for name in table_names]
+    logger.info(f"Tables in database: {table_names}")
+    return table_names

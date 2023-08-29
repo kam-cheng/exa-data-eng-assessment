@@ -2,11 +2,33 @@ import json
 from json.decoder import JSONDecodeError
 import logging
 import re
+import os
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+
+def retrieve_json_filenames(directory: str) -> list:
+    """Checks the input directory for .json files and returns a list of
+    filenames. Will be used to retrieve FHIR bundles which are stored as .json
+    files.
+
+        Args:
+        directory (str): Directory to search for .json files.
+
+    Returns:
+        list: A list of filenames containing each .json file in the directory.
+    """
+    json_filenames = []
+    for filename in os.listdir(directory):
+        if filename.endswith(".json"):
+            logger.debug("FHIR Bundle found: " + filename)
+            json_filenames.append(filename)
+
+    logger.info(f"Retrieved {len(json_filenames)} .json files.")
+    return json_filenames
 
 
 def parse_json_file(filepath: str) -> dict:
@@ -56,7 +78,6 @@ def retrieve_patient_entry_index(fhir_entries: list) -> int:
         resource = entry['resource']
         if resource['resourceType'] == 'Patient':
             logger.debug(f"Found patient resource at index {index}")
-            print(entry)
             return index
 
     raise PatientNotFoundError()
