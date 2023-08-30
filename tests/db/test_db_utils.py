@@ -1,5 +1,5 @@
 import psycopg2
-from psycopg2 import sql
+from psycopg2 import sql, errors
 from psycopg2.extensions import cursor
 
 import pytest
@@ -8,7 +8,7 @@ import logging
 from db.utils import (create_database, delete_database,
                       create_patient_table, add_patient_entry,
                       create_resource_table, add_event_entry,
-                      retrieve_table_names,
+                      retrieve_table_names, create_gin_index,
                       db_params)
 from tests.data.patient_entry import PATIENT_ENTRY
 from tests.data.encounter_entry import ENCOUNTER_ENTRY
@@ -404,3 +404,29 @@ class TestRetrieveTableNames:
         cursor = test_create_table
         tables = retrieve_table_names(cursor)
         assert tables == self.tables
+
+
+class TestCreateGinIndex:
+    table = "patient"
+    column = "resource"
+    index = "patient_idx"
+    non_existent_column = "non_existent_resource"
+
+    def test_create_gin_index_returns_type_none(self, add_patients):
+        cursor = add_patients
+        assert create_gin_index(cursor, self.table, self.column) is None
+
+    def test_create_gin_index_creates_index_of_table_with_idx_suffix(self, add_patients):
+        cursor = add_patients
+        create_gin_index(cursor, self.table, self.column)
+        query = """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = %s
+                      AND indexname = %s
+                """
+        cursor.execute(query, (self.table, self.index))
+        indexes = cursor.fetchall()
+        assert len(indexes) == 1
+        assert indexes[0][0] == self.index

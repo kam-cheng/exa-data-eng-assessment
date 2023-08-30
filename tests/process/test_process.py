@@ -27,17 +27,17 @@ class TestProcessFhirBundle:
     expected_tables = ["patient", "encounter", "condition",
                        "diagnostic_report", "document_reference"]
 
-    def test_process_fhir_bundle_returns_type_list(self, db_cursor):
+    def test_process_fhir_bundle_returns_type_set(self, db_cursor):
         cursor = db_cursor
         assert isinstance(process_fhir_bundle(
-            self.fhir_filepath, cursor), list)
+            self.fhir_filepath, cursor), set)
 
-    def test_process_fhir_bundle_returns_list_of_correct_length(self, db_cursor):
+    def test_process_fhir_bundle_returns_set_of_correct_length(self, db_cursor):
         cursor = db_cursor
         tables = process_fhir_bundle(self.fhir_filepath, cursor)
         assert len(tables) == len(self.expected_tables)
 
-    def test_process_fhir_bundle_returns_list_of_correct_table_names(self, db_cursor):
+    def test_process_fhir_bundle_returns_set_of_correct_table_names(self, db_cursor):
         cursor = db_cursor
         tables = process_fhir_bundle(self.fhir_filepath, cursor)
         # tables should be using snake case

@@ -213,3 +213,26 @@ def retrieve_table_names(cursor: cursor) -> list:
     table_names = [name[0] for name in table_names]
     logger.info(f"Tables in database: {table_names}")
     return table_names
+
+
+def create_gin_index(cursor: cursor, table: str, column: str):
+    """Creates a GIN index on the specified column of the specified table to
+    speed up querying. GIN indexing is used for handling jsonb data types.
+
+    Args:
+        cursor (psycopg2.extensions.cursor): cursor object to execute SQL commands
+        table (str): name of the table to add the index to
+        column (str): name of the column to add the index to
+    """
+    index = f"{table}_idx"
+    index_sql = sql.SQL("""
+        CREATE INDEX {index} ON {table} USING GIN ({column});
+        """).format(index=sql.Identifier(index),
+                    table=sql.Identifier(table),
+                    column=sql.Identifier(column))
+    try:
+        cursor.execute(index_sql)
+        logger.info(f"Index created on {table} for column {column}.")
+
+    except errors.DuplicateTable:
+        logger.info(f"Index {index} already exists on {table}.")

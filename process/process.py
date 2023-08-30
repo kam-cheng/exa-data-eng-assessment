@@ -6,7 +6,7 @@ from db.utils import add_patient_entry, add_event_entry, create_resource_table
 
 
 def process_fhir_bundle(filepath: str, cursor: extensions.cursor,
-                        tables: list = []):
+                        tables: set = set()) -> None:
     """Retrieves the FHIR bundle from the specified filepath and processes it.
 
     Processing involves:
@@ -20,7 +20,7 @@ def process_fhir_bundle(filepath: str, cursor: extensions.cursor,
         cursor (extensions.cursor): psycopg2 cursor object for querying the database
 
     Returns:
-        tables(list): updated list of table names in the database
+        tables(set): updated set of table names in the database
     """
     # copy the table to avoid mutating the original
     tables = tables.copy()
@@ -32,7 +32,7 @@ def process_fhir_bundle(filepath: str, cursor: extensions.cursor,
     patient_entry = entries[retrieve_patient_entry_index(entries)]
     # patient id is used to link other events to the patient
     patient_id: int = add_patient_entry(cursor, patient_entry)
-    tables.append("patient")
+    tables.add("patient")
 
     for entry in entries:
         resource_type = entry['resource']['resourceType']
@@ -45,7 +45,7 @@ def process_fhir_bundle(filepath: str, cursor: extensions.cursor,
         # Only create a new table if it does not already exist
         if table_name not in tables:
             create_resource_table(cursor, table_name)
-            tables.append(table_name)
+            tables.add(table_name)
         # Finally, add the event entry to the table with a matching resource
         # type.
         add_event_entry(cursor, table_name, entry, patient_id)

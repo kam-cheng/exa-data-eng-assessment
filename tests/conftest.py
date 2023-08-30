@@ -2,10 +2,12 @@
 import psycopg2
 from psycopg2 import sql, errors
 from psycopg2.extensions import cursor
-from db.utils import create_patient_table, create_resource_table
-
 import pytest
 
+import os
+import shutil
+
+from db.utils import create_patient_table, create_resource_table
 from db.utils import db_params
 
 test_db_params = {
@@ -51,7 +53,7 @@ def clear_tables(create_test_db):
 
 
 @pytest.fixture
-def test_db_cursor(clear_tables) -> cursor:
+def test_db_cursor(clear_tables, setup_fhir_dir) -> cursor:
     # Pytest fixture which yields a cursor object connected to the test database
     connection = psycopg2.connect(**test_db_params)
     connection.autocommit = True
@@ -67,3 +69,17 @@ def test_create_table(test_db_cursor) -> cursor:
     create_patient_table(test_db_cursor)
     create_resource_table(test_db_cursor, "resource_type_01")
     yield test_db_cursor
+
+
+@pytest.fixture()
+def setup_fhir_dir():
+    source_directory = "tests/data/fhir_bundles/processed"
+    destination_directory = "tests/data/fhir_bundles"
+    # Retrieve the list of files in the source directory
+    files_to_move = os.listdir(source_directory)
+    # Move files from the source to the destination directory
+    for filename in files_to_move:
+        source_path = os.path.join(source_directory, filename)
+        destination_path = os.path.join(destination_directory, filename)
+        shutil.move(source_path, destination_path)
+    yield  # Yield to the test function
