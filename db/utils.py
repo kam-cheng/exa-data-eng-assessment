@@ -3,14 +3,15 @@ from psycopg2.extensions import cursor
 from psycopg2.extras import Json
 
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 db_params = {
     "user": "postgres",
     "password": "password",
-    "host": "localhost",
-    "port": 5432
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "port": 5432,
 }
 
 

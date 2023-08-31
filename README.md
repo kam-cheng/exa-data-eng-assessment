@@ -41,7 +41,11 @@ python -m venv venv
 ```
 pip install -r requirements.txt
 ```
-6. Seed the database. 
+6. Set the `PYTHONPATH` environment variable to the root directory of the repository
+```
+export PYTHONPATH=.
+```
+7. Seed the database. 
 
 **Note: This deletes any existing databases named 'dev_patient_db' and 'test_patient_db'.**
 ```
@@ -52,9 +56,32 @@ python db/seed_db.py
 2023-08-31 00:01:44,799 - INFO - Database 'dev_patient_db' created successfully.
 2023-08-31 00:01:44,843 - INFO - Database 'test_patient_db' created successfully.
 ```
-7. Run the processor script
+8. Run the processor script
 ```
 python main.py
+```
+
+## Docker Setup 
+
+Instead of installing the requirements and setting up the database manually, the processor can be run using Docker.
+
+1. Clone the repository
+
+```
+git clone https://github.com/kam-cheng/exa-data-eng-assessment.git
+```
+2. Change directory into the repository
+
+```
+cd exa-data-eng-assessment
+```
+3. Build the docker image using docker compose
+```
+docker compose up
+```
+4. In the Docker Container Terminal, run the following command to access the psql shell
+```
+psql -d dev_patient_db -U postgres
 ```
 
 ## Usage
@@ -73,7 +100,7 @@ Table `'patient'` stores FHIR entries with the resource type `'Patient'`:
 | request   | jsonb       | request         |           
 
 
-All other tables are created dynamically based on the resource type the entry, and will contain the following columns:
+All other tables are created dynamically based on the FHIR entry's resource type value. The value is parsed to camel case (e.g. resource type `ExplanationOfBenefit` is converted to table name `explanation_of_benefit`), before creating the table with the following columns:
 
 | `Column:` | `Data Type:`| `FHIR Key:`     | 
 | --------- | ----------- | -------------   | 

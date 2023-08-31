@@ -32,21 +32,23 @@ def process_fhir_bundles(cursor: extensions.cursor, directory: str) -> None:
 
     tables = set()
 
+    counter = 0
     for file in fhir_files:
 
         file_path = os.path.join(directory, file)
         logger.info(f"Processing FHIR bundle: {file_path}")
         tables = process_fhir_bundle(file_path, cursor, tables)
+        counter += 1
 
         # move processed file to processed directory so it is not reprocessed
         processed_path = os.path.join(directory, "processed", file)
         shutil.move(file_path, processed_path)
 
-    logging.info("Finished processing FHIR bundles.")
-
     # create GIN index on resource column for each table for faster querying
     for table in tables:
         create_gin_index(cursor, table, "resource")
+    logging.info(f"Indexing Completed for {len(tables)} tables.")
+    logging.info(f"Finished processing {counter} FHIR bundles!")
 
 
 if __name__ == "__main__":
@@ -54,8 +56,8 @@ if __name__ == "__main__":
         "dbname": "dev_patient_db",
         "user": "postgres",
         "password": "password",
-        "host": "localhost",
-        "port": 5432
+        "host": os.environ.get("DB_HOST", "localhost"),
+        "port": 5432,
     }
 
     connection = psycopg2.connect(**db_params)
