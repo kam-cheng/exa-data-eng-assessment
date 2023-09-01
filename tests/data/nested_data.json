@@ -1,0 +1,7 @@
+{
+    "level_1_dict_key": {
+        "level_2_dict_key": "level_2_dict_value"
+    }, 
+    "level_1_list_key": ["level_1_list_value_1", "level_1_list_value_2"],
+    "level_1_list_of_dicts_key": [{"level_1_": "list_value1"}, {"list_key": "list_value2"}]
+}
